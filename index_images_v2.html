@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>아이스크림 추천 (이미지 그리드 4×9)</title>
+  <style>
+    :root { --gap: 12px; }
+    body{font-family:system-ui,Apple SD Gothic Neo,Segoe UI,Roboto,맑은 고딕,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px}
+    h1{margin-bottom:8px}
+    .muted{color:#666;font-size:12px}
+    .section{border:1px solid #e5e5e5;border-radius:16px;padding:16px;margin:16px 0}
+    .grid{display:grid;grid-template-columns:repeat(4, 1fr);gap:var(--gap)}
+    @media (max-width:900px){ .grid{grid-template-columns:repeat(3, 1fr);} }
+    @media (max-width:640px){ .grid{grid-template-columns:repeat(2, 1fr);} }
+    .card{border:1px solid #ddd;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04);cursor:pointer;transition:transform .06s ease, box-shadow .06s ease}
+    .card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.08)}
+    .card.selected{outline:2px solid #2f6feb; box-shadow:0 0 0 4px rgba(47,111,235,.1)}
+    .imgwrap{position:relative;width:100%;padding-top:100%;background:#fafafa}
+    .imgwrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+    .name{padding:10px 12px;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-top:1px solid #eee}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .pill{display:inline-block;background:#f2f2f2;border-radius:999px;padding:2px 10px;margin-left:6px;font-size:12px}
+    .reco{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gap)}
+    @media (max-width:900px){ .reco{grid-template-columns:repeat(2,1fr);} }
+    @media (max-width:640px){ .reco{grid-template-columns:1fr;} }
+    .help{margin-top:4px}
+  </style>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+  <h1>아이스크림 추천 (이미지 그리드 4×9)</h1>
+  <div class="muted help">CSV: <code>data/아이스크림csv.csv</code> / 이미지: <code>img/{id}.jpg 또는 .png</code></div>
+
+  <div class="section">
+    <div class="row" style="justify-content:space-between;">
+      <div class="row">
+        <div><b>전체 맛</b> <span id="count" class="pill">-개</span></div>
+      </div>
+      <div class="muted">카드를 클릭하면 해당 맛이 선택됩니다 (추천 3개 자동 표시)</div>
+    </div>
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <div class="section">
+    <div class="row" style="justify-content:space-between;">
+      <div class="row"><b>추천 결과</b> <span class="muted">3개</span></div>
+      <div id="selectedName" class="muted"></div>
+    </div>
+    <div id="reco" class="reco"></div>
+  </div>
+
+<script>
+let ITEMS=[]; // {id, name, vec}
+let SELECTED_INDEX = -1;
+const GRID_SLOTS = 36; // 4x9
+
+function cosine(a,b){
+  let dot=0,na=0,nb=0;
+  const n = Math.max(a.length,b.length);
+  for(let i=0;i<n;i++){const x=Number(a[i]||0), y=Number(b[i]||0); dot+=x*y; na+=x*x; nb+=y*y;}
+  if(na===0||nb===0) return 0; return dot/(Math.sqrt(na)*Math.sqrt(nb));
+}
+
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
+
+function imgOnError(img, id, triedPng){
+  if(!triedPng){ // try png if jpg failed
+    img.onerror = () => imgOnError(img, id, true);
+    img.src = `img/${id}.png`;
+  } else {
+    img.onerror = null;
+    img.src = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'><rect width='100%' height='100%' fill='%23f3f4f6'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='system-ui,Segoe UI,Roboto' font-size='18' fill='%23666'>이미지 없음</text></svg>`;
+  }
+}
+
+async function loadCSV(){
+  const url = 'data/아이스크림csv.csv' + `?v=${Date.now()}`;
+  const res = await fetch(url);
+  if(!res.ok){ document.getElementById('count').textContent = 'CSV 없음'; return; }
+  const text = await res.text();
+  const parsed = Papa.parse(text, {skipEmptyLines:true});
+  const rows = parsed.data;
+  if(rows.length<2){ document.getElementById('count').textContent = '데이터 없음'; return; }
+
+  ITEMS = [];
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i]; if(!r || r.length<2) continue;
+    const id = String(r[0]).trim(); const name = r[1]; if(!name) continue;
+    const vec = r.slice(2).map(v => (v===""||v==null)?0:Number(v));
+    ITEMS.push({id, name: String(name), vec});
+  }
+
+  renderGrid();
+  if(ITEMS.length>0){ selectIndex(0); }
+}
+
+function renderGrid(){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = ITEMS.map((it,idx)=> cardHTML(it, idx)).join('');
+  document.getElementById('count').textContent = ITEMS.length + '개';
+
+  // 4x9 = 36칸 맞추기용 placeholder
+  if(ITEMS.length < GRID_SLOTS){
+    const remain = GRID_SLOTS - ITEMS.length;
+    grid.innerHTML += Array.from({length:remain}).map(()=>'<div class="card" style="visibility:hidden"></div>').join('');
+  }
+
+  // 이벤트 바인딩
+  Array.from(grid.querySelectorAll('.card')).forEach((el)=>{
+    const i = Number(el.getAttribute('data-idx'));
+    if(Number.isNaN(i)) return;
+    el.addEventListener('click', ()=> selectIndex(i));
+  });
+}
+
+function cardHTML(it, idx){
+  return `<div class="card" data-idx="${idx}" id="card-${idx}">
+    <div class="imgwrap"><img src="img/${it.id}.jpg" alt="${escapeHtml(it.name)}" onerror="imgOnError(this, '${it.id}', false)"/></div>
+    <div class="name" title="${escapeHtml(it.name)}">${escapeHtml(it.name)}</div>
+  </div>`;
+}
+
+function selectIndex(idx){
+  if(idx===SELECTED_INDEX) return;
+  if(SELECTED_INDEX>=0){
+    const prev = document.getElementById('card-'+SELECTED_INDEX);
+    if(prev) prev.classList.remove('selected');
+  }
+  SELECTED_INDEX = idx;
+  const el = document.getElementById('card-'+idx);
+  if(el) el.classList.add('selected');
+
+  const it = ITEMS[idx];
+  document.getElementById('selectedName').textContent = `선택: ${it.name}`;
+  renderRecommendations(idx, 3);
+}
+
+function renderRecommendations(idx, k){
+  const base = ITEMS[idx];
+  const list = [];
+  for(let i=0;i<ITEMS.length;i++){
+    if(i===idx) continue;
+    list.push({i, score: cosine(base.vec, ITEMS[i].vec)});
+  }
+  list.sort((a,b)=>b.score-a.score);
+  const top = list.slice(0,k);
+
+  const wrap = document.getElementById('reco');
+  wrap.innerHTML = top.map((t,rank)=>{
+    const it = ITEMS[t.i];
+    return `<div class="card">
+      <div class="imgwrap"><img src="img/${it.id}.jpg" alt="${escapeHtml(it.name)}" onerror="imgOnError(this, '${it.id}', false)"/></div>
+      <div class="name">${rank+1}. ${escapeHtml(it.name)} <span class="pill">유사도 ${Math.round(t.score*1000)/1000}</span></div>
+    </div>`;
+  }).join('');
+}
+
+loadCSV();
+</script>
+</body>
+</html>
