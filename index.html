@@ -28,6 +28,10 @@
     .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid #ddd;background:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
     .btn:hover{background:#f8f8f8}
     .header-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .reco-wrap {
+  transform: scale(0.8);         /* 80% 비율로 축소 */
+  transform-origin: top center;  /* 위쪽 중앙 기준으로 줄임 */
+}
     /* Views */
     #view-list{display:block}
     #view-detail{display:none}
@@ -61,8 +65,10 @@
       <button id="back" class="btn" type="button" aria-label="이전 페이지로 돌아가기">← 이전 페이지로 돌아가기</button>
     </div>
     <div style="height:8px"></div>
-    <div><b>추천 맛 3가지</b></div>
+    <div><b>추천 맛 3가지</b></div>4
+    <div class="reco-wrap">
     <div id="reco" class="reco"></div>
+    </div>
   </section>
 
 <script>
