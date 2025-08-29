@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>아이스크림 추천</title>
+  <style>
+    body{font-family:system-ui,Apple SD Gothic Neo,Segoe UI,Roboto,맑은 고딕,sans-serif;max-width:860px;margin:24px auto;padding:0 16px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    .card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}
+    select{font-size:14px;padding:8px;border:1px solid #ccc;border-radius:8px}
+    .muted{color:#666;font-size:12px}
+    .pill{display:inline-block;background:#f2f2f2;border-radius:999px;padding:2px 10px;margin-left:6px;font-size:12px}
+  </style>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+  <h1>아이스크림 추천 (CSV 자동 로딩)</h1>
+  <div class="card">
+    <div class="row">
+      <label>맛 선택:
+        <select id="item"></select>
+      </label>
+      <span class="muted">추천 개수: 3개 고정</span>
+    </div>
+    <div id="meta" class="muted"></div>
+  </div>
+  <div class="card">
+    <h2>추천 결과</h2>
+    <div id="out" class="row"></div>
+  </div>
+<script>
+let ITEMS=[], USERS=[], MAT=[];
+
+function cosine(a,b){
+  let dot=0,na=0,nb=0;
+  for(let i=0;i<a.length;i++){const x=Number(a[i]||0), y=Number(b[i]||0); dot+=x*y; na+=x*x; nb+=y*y;}
+  if(na===0||nb===0) return 0; return dot/(Math.sqrt(na)*Math.sqrt(nb));
+}
+
+async function load(){
+  const url = 'data/아이스크림csv.csv' + `?v=${Date.now()}`;
+  const res = await fetch(url);
+  if(!res.ok){ document.getElementById('meta').textContent = `CSV를 찾을 수 없습니다: ${url}`; return; }
+  const text = await res.text();
+  const parsed = Papa.parse(text, {skipEmptyLines:true});
+  const rows = parsed.data;
+  if(rows.length<2){ document.getElementById('meta').textContent = 'CSV가 비어있습니다.'; return; }
+
+  const header = rows[0];
+  if(header.length<2){ document.getElementById('meta').textContent = '두 번째 열(맛 이름)이 필요합니다.'; return; }
+  USERS = header.slice(2);
+  ITEMS = []; MAT = [];
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    if(!r || r.length<2) continue;
+    const name = r[1];
+    if(!name) continue;
+    ITEMS.push(String(name));
+    const scores = r.slice(2).map(v => (v===""||v==null)?0:Number(v));
+    MAT.push(scores);
+  }
+
+  const sel = document.getElementById('item');
+  sel.innerHTML = ITEMS.map(n=>`<option>${n}</option>`).join('');
+  document.getElementById('meta').textContent = `항목 ${ITEMS.length}개 · 사용자 ${USERS.length}명`;
+  if(ITEMS.length>0){ sel.value = ITEMS[0]; recommend(3); }
+}
+
+function recommend(k=3){
+  const name = document.getElementById('item').value;
+  const idx = ITEMS.indexOf(name); if(idx<0) return;
+  const base = MAT[idx];
+  const scores=[];
+  for(let i=0;i<ITEMS.length;i++){ if(i===idx) continue; scores.push({name:ITEMS[i], score:cosine(base, MAT[i])}); }
+  scores.sort((a,b)=>b.score-a.score);
+  const top = scores.slice(0,k);
+  document.getElementById('out').innerHTML = top.map((t,i)=>`<div class="card" style="flex:1 1 240px">
+    <div><b>${i+1}. ${t.name}</b><span class="pill">유사도 ${Math.round(t.score*1000)/1000}</span></div>
+  </div>`).join('');
+}
+
+document.getElementById('item').addEventListener('change', ()=>recommend(3));
+load();
+</script>
+</body>
+</html>
