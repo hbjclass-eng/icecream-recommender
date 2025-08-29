@@ -54,6 +54,8 @@
     <div class="row" style="justify-content:space-between;">
       <div class="row">
         <b>당신이 고른 맛:</b>
+        <!-- ✅ 선택한 맛 사진 -->
+        <img id="chosenImg" alt="선택한 아이스크림" style="width:140px;height:140px;object-fit:cover;border:1px solid #ddd;border-radius:12px;margin-left:10px" />
         <span id="chosen" class="pill">-</span>
       </div>
       <button id="back" class="btn" type="button" aria-label="이전 페이지로 돌아가기">← 이전 페이지로 돌아가기</button>
@@ -137,6 +139,10 @@ function goDetail(idx){
   SELECTED_INDEX = idx;
   const it = ITEMS[idx];
   document.getElementById('chosen').textContent = it.name;
+  // ✅ 사진 세팅 (jpg만 사용, 캐시 무효화)
+  const img = document.getElementById('chosenImg');
+  img.onerror = () => imgOnError(img);     // 없을 때 플레이스홀더로
+  img.src = `img/${it.id}.jpg?v=${Date.now()}`;
   renderRecommendations(idx, 3);
   // 화면 전환
   document.getElementById('view-list').style.display = 'none';
